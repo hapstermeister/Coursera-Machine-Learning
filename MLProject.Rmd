@@ -1,0 +1,101 @@
+---
+title: 'Machine Learning Project: Fitness Device Prediction Assignment'
+author: "hapstermeister (Happy Hsin)"
+date: "July 17, 2016"
+output: html_document
+---
+
+## Introduction
+
+Fitness devices such as Jawbone Up, Nike Fuelband, and Fitbit collect a large amount of personal activity data. While each particular activity is quantified in detail, how well the users do each activity is rarely quantified. This project will attempt to answer that question.
+
+## Exploratory Data Analysis
+
+```{r, echo = FALSE}
+suppressMessages(library(AppliedPredictiveModeling))
+suppressMessages(library(caret))
+suppressMessages(library(randomForest))
+suppressMessages(library(rpart))
+suppressMessages(library(e1071))
+set.seed(123)
+training <- read.csv("pml-training.csv")
+```
+
+This project will use the data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. Each participient was asked to perform barbell lifts correctly and incorrectly in 5 different ways (as represented by the variable 'classe'). As we can see there are `r dim(training)[1]` data points and `r dim(training)[2]` fields.
+
+## Modeling and Predicting
+
+First, we will clean the data by removing columns that are unnecessary (myTraining), removing columns that have more than 90% NA's (myTraining2), and removing data columns that have near zero variance (myTraining3). Finally, we partition the data set into two groups: a training set called 'myTraining4', and a test set called 'myTesting4'. All machine learning algorithms will be trained using the 'myTraining4' data set. 
+
+```{r, results = FALSE}
+# Clean the Data set (training <- "pml-training.csv")
+## Remove user_name and *timestamp* columns (first five columns) of the training set (these fields are unnecessary)
+myTraining <- training[,-(1:5)]
+## Remove columns that have more than 90% NA's
+naCols <- lapply(myTraining, function(x) mean(is.na(x)) > 0.90)
+myTraining2 <- myTraining[naCols == FALSE]
+## Remove data with have near zero variance
+nzv <- nearZeroVar(myTraining2, saveMetrics = TRUE)
+myTraining3 <- myTraining2[!nzv$nzv]
+## Partition the Data set further
+inTrain <- createDataPartition(y = myTraining3$classe, p = 0.6, list = FALSE)
+myTraining4 <- myTraining3[inTrain,] 
+myTesting4 <- myTraining3[-inTrain,]
+```
+
+In this project we will look at and compare the results of three different Machine Learning models: Random Forest (modrf), Generalized Boost (modgbm), and Recursive Partitioning (modrpart). Random Forest (RF) Models are very accurate, however they are very slow to compute due to multitudes of resulting trees, so we limit the number of trees to 10 for this project. Generalized Boosting (GBM) is also generally accurate since lots of predictors are weighted and added resulting in a stronger predictor. Recursive Partitioning (RPART) is the easiest or most straightforward method of the three but it is harder to estimate uncertainty especially since the method can lead to overfitting of the predictors. 
+
+```{r, results = FALSE}
+# Create models
+modrf <- train(classe ~ ., method = "rf", data = myTraining4, ntree = 10, trControl = trainControl(method = "cv"))
+suppressMessages(modgbm <- train(classe ~ ., method = "gbm", data = myTraining4))
+modrpart <- train(classe ~ ., method = "rpart", data = myTraining4)
+```
+
+Based on these models we can create corresponding predictions:
+
+```{r, results = FALSE}
+predrfTRAIN <- predict(modrf, myTraining4)
+predgbmTRAIN <- predict(modgbm, myTraining4)
+predrpartTRAIN <- predict(modrpart, myTraining4)
+```
+```{r, echo = FALSE}
+cmrfTRAIN <- confusionMatrix(myTraining4$classe, predrfTRAIN)$overall['Accuracy']
+cmgbmTRAIN <- confusionMatrix(myTraining4$classe, predgbmTRAIN)$overall['Accuracy']
+cmrpartTRAIN <- confusionMatrix(myTraining4$classe, predrpartTRAIN)$overall['Accuracy']
+```
+
+The resulting accuracies for each of these approaches (RF, GBM, and RPART) on the training data set (myTraining4) are:
+
+```{r, echo = FALSE}
+c(cmrfTRAIN, cmgbmTRAIN, cmrpartTRAIN)
+```
+
+As you can see, the RF method yields the highest accuracy (`r cmrfTRAIN`) and the RPART method yields the lowest accuracy (`r cmrpartTRAIN`). The very low accuracy from the RPART method is possibly due to overfitting. 
+
+## Testing the Algorithms
+
+The algorithms were trained using the 'myTraining4' data set. To check the models, we can run the prediction algorithms on the 'myTesting4' test data set we created above.
+
+```{r, results = FALSE}
+predrfTEST <- predict(modrf, myTesting4)
+predgbmTEST <- predict(modgbm, myTesting4)
+predrpartTEST <- predict(modrpart, myTesting4)
+```
+```{r, echo = FALSE}
+cmrfTEST <- confusionMatrix(myTesting4$classe, predrfTEST)$overall['Accuracy']
+cmgbmTEST <- confusionMatrix(myTesting4$classe, predgbmTEST)$overall['Accuracy']
+cmrpartTEST <- confusionMatrix(myTesting4$classe, predrpartTEST)$overall['Accuracy']
+```
+
+Running the algorithms on the test set ('myTesting4') yields similar accuracies for RF, GBM, and RPART methods:
+
+```{r, echo = FALSE}
+c(cmrfTEST, cmgbmTEST, cmrpartTEST)
+```
+
+Again, the RF method yields the highest accuracy and the RPART method has the lowest accuracy.
+
+## Conclusion
+
+In this project we compared three different models for correctly predicting which method (out of 5 possible methods) a user used for particular activities. Results show that the prediction model based on the Random Forest method is the most accurate in correctly quantifying how a user performed an acitivity. 
